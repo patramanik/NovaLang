@@ -591,5 +591,44 @@ class TestStdlib(unittest.TestCase):
     def test_ai_stdlib(self):
         self.run_expr_test("import ai\nai.sigmoid(0.0)", 0.5, "fadd double 0.5")
 
+    def test_collections_stdlib(self):
+        # 1. Test List operations
+        source_list = """
+        import collection
+        let l = collection.list()
+        collection.list_add(l, "first")
+        collection.list_add(l, "second")
+        collection.list_get(l, 1)
+        """
+        self.run_expr_test(source_list, "second", "mock list")
+        
+        # Test list length
+        source_len = """
+        import collection
+        let l = collection.list()
+        collection.list_add(l, 10)
+        collection.list_add(l, 20)
+        collection.list_len(l)
+        """
+        self.run_expr_test(source_len, 2, "add i32 0, 0")
+        
+        # 2. Test Map operations
+        source_map = """
+        import collection
+        let m = collection.map()
+        collection.map_set(m, "hello", 42)
+        collection.map_get(m, "hello")
+        """
+        self.run_expr_test(source_map, 42, "mock map")
+        
+        # Test map has key
+        source_has = """
+        import collection
+        let m = collection.map()
+        collection.map_set(m, "exists", true)
+        collection.map_has(m, "exists")
+        """
+        self.run_expr_test(source_has, True, "xor i1 0, 0")
+
 if __name__ == "__main__":
     unittest.main()
