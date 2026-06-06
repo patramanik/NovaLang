@@ -1,42 +1,24 @@
-# Python build/packaging artifacts
+# Python build and compilation caches
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 *.egg-info/
 build/
 dist/
-eggs/
-lib/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
+*.spec
 
-# Virtual environments
-venv/
+# Python virtual environments
 .venv/
-env/
-ENV/
 
-# IDE / Editor configuration
+# Editor/IDE configurations
 .vscode/
 .idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
-*.swo
 
-# Compiled compiler outputs and binaries
+# NovaLang AOT and Bytecode compilation targets
 *.ll
 *.exe
 *.novac
 *.o
 *.obj
 *.pdb
-*.spec
 test_temp/
-my_project/build/
-my_awesome_app/build/
+example_project/build/
