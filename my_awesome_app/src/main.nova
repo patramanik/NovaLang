@@ -1,0 +1,34 @@
+// NovaLang Starter Project
+// This file showcases the key features of NovaLang: gradual typing, custom functions, and pattern matching.
+
+// 1. Statically-typed constant binding
+let welcomeMessage = "Hello from NovaLang!"
+print(welcomeMessage)
+
+// 2. Mutable variable using static type annotation
+count: Int = 10
+
+// 3. Reusable function with static types
+fun calculateSquare(n: Int): Int {
+    return n * n
+}
+
+// 4. Cooperative control flow with if-else
+let inputVal = 5
+let squareResult = calculateSquare(inputVal)
+
+if (squareResult > 20) {
+    print("Square is greater than 20")
+} else {
+    print("Square is less than or equal to 20")
+}
+
+// 5. Pattern matching
+print("Pattern matching example:")
+match inputVal {
+    1 => { print("One") }
+    5 => { print("Five - Match found!") }
+    _ => { print("Other value") }
+}
+
+print("Starter project execution complete!")

@@ -1,0 +1,12 @@
+// Define variables
+x = 5
+let multiplier = 10
+
+// Define a statically-typed function
+fun multiply(val: Int): Int {
+    return val * multiplier
+}
+
+// Call function and print the result
+let result = multiply(x)
+print(result) // Expected output: 50

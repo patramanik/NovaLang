@@ -1,0 +1,8 @@
+[package]
+name = "my_awesome_app"
+version = "0.1.0"
+authors = ["Manik Patra <manikpatra409@gmail.com>"]
+edition = "2026"
+
+[dependencies]
+# Add dependencies here
