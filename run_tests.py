@@ -2,7 +2,10 @@ import unittest
 from typing import Any
 from novalang.lexer import Lexer, TokenType
 from novalang.parser import Parser
-from novalang.ast import LiteralNode, IdentifierNode, LetNode, AssignNode, BinaryOpNode
+from novalang.ast import (
+    LiteralNode, IdentifierNode, LetNode, AssignNode, BinaryOpNode, AsmNode,
+    TryCatchFinallyNode, ThrowNode, FunctionDeclNode
+)
 from novalang.interpreter import Interpreter, Environment
 
 class TestLexer(unittest.TestCase):
@@ -102,6 +105,20 @@ class TestParser(unittest.TestCase):
         self.assertEqual(ast.statements[1].type_ann, "Int")
         self.assertIsInstance(ast.statements[2], AssignNode)
         self.assertEqual(ast.statements[2].type_ann, None)
+
+    def test_asm_parsing(self):
+        source = 'asm "MOV AX, 10"\nasm { "MOV BX, 20" "NOP" }'
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        self.assertEqual(len(parser.errors), 0)
+        self.assertEqual(len(ast.statements), 2)
+        self.assertIsInstance(ast.statements[0], AsmNode)
+        self.assertEqual(ast.statements[0].instructions, ["MOV AX, 10"])
+        self.assertIsInstance(ast.statements[1], AsmNode)
+        self.assertEqual(ast.statements[1].instructions, ["MOV BX, 20", "NOP"])
 
 class TestInterpreter(unittest.TestCase):
     def test_evaluation(self):
@@ -629,6 +646,91 @@ class TestStdlib(unittest.TestCase):
         collection.map_has(m, "exists")
         """
         self.run_expr_test(source_has, True, "xor i1 0, 0")
+
+class TestExceptionHandling(unittest.TestCase):
+    def test_exception_parsing(self):
+        source = """
+        fun fail() throws ErrorType {
+            throw "An error occurred"
+        }
+        try {
+            fail()
+        }
+        catch(e: Exception) {
+            print(e)
+        }
+        finally {
+            print("cleaned")
+        }
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        self.assertEqual(len(parser.errors), 0)
+        self.assertIsInstance(ast.statements[0], FunctionDeclNode)
+        self.assertEqual(ast.statements[0].throws_types, ["ErrorType"])
+        self.assertIsInstance(ast.statements[1], TryCatchFinallyNode)
+        self.assertEqual(ast.statements[1].catch_var, "e")
+        self.assertEqual(ast.statements[1].catch_type, "Exception")
+        
+    def test_interpreter_exceptions(self):
+        source = """
+        status = 0
+        finally_run = 0
+        try {
+            throw "fail"
+            status = 1
+        }
+        catch(err) {
+            status = 2
+        }
+        finally {
+            finally_run = 1
+        }
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        interpreter = Interpreter()
+        interpreter.interpret(ast)
+        self.assertEqual(interpreter.environment.get("status"), 2)
+        self.assertEqual(interpreter.environment.get("finally_run"), 1)
+
+    def test_vm_exceptions(self):
+        source = """
+        status = 0
+        finally_run = 0
+        try {
+            throw "fail"
+            status = 1
+        }
+        catch(err) {
+            status = 2
+        }
+        finally {
+            finally_run = 1
+        }
+        """
+        lexer = Lexer(source)
+        tokens = lexer.tokenize()
+        parser = Parser(tokens)
+        ast = parser.parse()
+        
+        from novalang.codegen_vm import VMBytecodeGenerator
+        from novalang.vm import VirtualMachine
+        
+        codegen = VMBytecodeGenerator()
+        bc = codegen.generate(ast)
+        
+        vm = VirtualMachine()
+        vm.run(bc)
+        
+        self.assertEqual(vm.globals["status"].value, 2)
+        self.assertEqual(vm.globals["finally_run"].value, 1)
 
 if __name__ == "__main__":
     unittest.main()

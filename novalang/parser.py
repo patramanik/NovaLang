@@ -3,7 +3,8 @@ from novalang.lexer import Token, TokenType
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode, AsmNode,
+    TryCatchFinallyNode, ThrowNode
 )
 
 class Parser:
@@ -100,10 +101,58 @@ class Parser:
             return self.parse_import_statement()
         elif self.match(TokenType.PACKAGE):
             return self.parse_package_statement()
+        elif self.match(TokenType.ASM):
+            return self.parse_asm_statement()
+        elif self.check(TokenType.TRY):
+            return self.parse_try_statement()
+        elif self.match(TokenType.THROW):
+            return self.parse_throw_statement()
         elif self.check(TokenType.LBRACE):
             return self.parse_block()
         else:
             return self.parse_assignment_or_expression()
+
+    def parse_try_statement(self) -> ASTNode:
+        self.consume(TokenType.TRY, "Expected 'try'")
+        try_block = self.parse_block()
+        
+        catch_var = None
+        catch_type = None
+        catch_block = None
+        
+        if self.match(TokenType.CATCH):
+            self.consume(TokenType.LPAREN, "Expected '(' after 'catch'")
+            catch_var = self.consume(TokenType.IDENTIFIER, "Expected catch parameter name").value
+            if self.match(TokenType.COLON):
+                catch_type = self.consume(TokenType.IDENTIFIER, "Expected catch exception type").value
+            self.consume(TokenType.RPAREN, "Expected ')' after catch parameter")
+            catch_block = self.parse_block()
+            
+        finally_block = None
+        if self.match(TokenType.FINALLY):
+            finally_block = self.parse_block()
+            
+        if not catch_block and not finally_block:
+            self.error("Expected 'catch' or 'finally' block after 'try'")
+            
+        return TryCatchFinallyNode(try_block, catch_var, catch_type, catch_block, finally_block)
+
+    def parse_throw_statement(self) -> ASTNode:
+        value = self.parse_expression()
+        return ThrowNode(value)
+
+    def parse_asm_statement(self) -> ASTNode:
+        instructions = []
+        if self.match(TokenType.LBRACE):
+            while not self.check(TokenType.RBRACE) and not self.check(TokenType.EOF):
+                token = self.consume(TokenType.STRING, "Expected assembly instruction string inside asm block")
+                instructions.append(token.value)
+            self.consume(TokenType.RBRACE, "Expected '}' after asm block")
+        else:
+            token = self.consume(TokenType.STRING, "Expected assembly instruction string after 'asm'")
+            instructions.append(token.value)
+        return AsmNode(instructions)
+
 
     def parse_import_statement(self) -> ASTNode:
         name_parts = [self.consume(TokenType.IDENTIFIER, "Expected module name after 'import'").value]
@@ -156,8 +205,17 @@ class Parser:
             ret_type_tok = self.consume(TokenType.IDENTIFIER, "Expected return type name")
             return_type = ret_type_tok.value
             
+        throws_types = None
+        if self.match(TokenType.THROWS):
+            throws_types = []
+            while True:
+                err_type_tok = self.consume(TokenType.IDENTIFIER, "Expected exception type name after 'throws'")
+                throws_types.append(err_type_tok.value)
+                if not self.match(TokenType.COMMA):
+                    break
+            
         body = self.parse_block()
-        return FunctionDeclNode(ident_tok.value, params, return_type, body)
+        return FunctionDeclNode(ident_tok.value, params, return_type, body, throws_types)
 
     def parse_if_statement(self) -> ASTNode:
         self.consume(TokenType.IF, "Expected 'if'")

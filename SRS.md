@@ -105,7 +105,7 @@ NovaLang Ecosystem
 ├── Interpreter (REPL & VM)
 ├── Virtual Machine (Stack-based runtime)
 ├── Package Manager & Build System (nova)
-├── Standard Library (std.*)
+├── Standard Library (modular packages)
 ├── Language Server Protocol (LSP)
 ├── Debugger Interface
 ├── Documentation Generator
@@ -470,16 +470,16 @@ The CLI tool serves as both package manager and task orchestrator:
 
 ## 7. Standard Library Specification
 
-* **`std.io`:** Standard input, output stream wrappers, and file handles.
-* **`std.math`:** High-precision basic operations and trigonometric functions.
-* **`std.string`:** Unicode string operations, formatting, and regular expressions.
-* **`std.collection`:** Built-in List, Map, Set, Queue, and Tree structures.
-* **`std.net`:** Socket programming, HTTP server, and client implementations.
-* **`std.crypto`:** Core encryption (AES, RSA, SHA-2) implementations.
-* **`std.database`:** Common query abstractions.
-* **`std.json`:** JSON serialization and deserialization engine.
-* **`std.xml`:** XML document parsing.
-* **`std.ai` & `std.ml`:** High-level APIs for model serving and tensor handling.
+* **`io` (`import io`):** Standard input, output stream wrappers, and file helpers (`readline`, `readfile`, `writefile`).
+* **`math` (`import math`):** Trigonometric, basic arithmetic, and utility functions (`sqrt`, `sin`, `cos`, `abs`, `min`, `max`).
+* **`string` (`import string`):** Unicode string operations and formatting (`upper`, `lower`, `split`, `join`).
+* **`collection` (`import collection`):** Built-in collections handling lists and maps (`list`, `list_add`, `list_get`, `list_len`, `map`, `map_set`, `map_get`, `map_has`).
+* **`net` (`import net`):** Socket connections, server listening, and HTTP utilities (`request`, `listen`).
+* **`crypto` (`import crypto`):** Basic encryption and hashing implementations (`sha256`, `md5`).
+* **`db` (`import db`):** Relational/document database driver abstraction functions (`connect`, `query`).
+* **`ai` (`import ai`):** Optimization and model helpers (`dot_product`, `sigmoid`).
+* **`json` (planned):** JSON serialization and deserialization engine.
+* **`xml` (planned):** XML document parsing.
 
 ---
 

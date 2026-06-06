@@ -2,13 +2,15 @@ from typing import List, Dict, Optional, Tuple
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode, AsmNode,
+    TryCatchFinallyNode, ThrowNode
 )
 
 class LLVMCompiler:
     def __init__(self):
         self.globals_declarations: List[str] = [
             "declare i32 @printf(ptr, ...)",
+            "declare void @exit(i32)",
             "@str_format_int = private unnamed_addr constant [4 x i8] c\"%d\\0A\\00\", align 1",
             "@str_format_float = private unnamed_addr constant [6 x i8] c\"%.6f\\0A\\00\", align 1",
             "@str_format_string = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\", align 1",
@@ -222,6 +224,26 @@ class LLVMCompiler:
             self.compile_match(node)
         elif isinstance(node, ReturnNode):
             self.compile_return(node)
+        elif isinstance(node, AsmNode):
+            for instr in node.instructions:
+                # Escape double-quotes for LLVM assembly strings (\22 represents " in LLVM)
+                escaped_instr = instr.replace('"', '\\22')
+                self.current_fun_body.append(f"call void asm sideeffect \"{escaped_instr}\", \"\"()")
+        elif isinstance(node, ThrowNode):
+            val_reg, val_type = self.compile_expression(node.value)
+            if val_type == "Int":
+                self.current_fun_body.append(f"call i32 (ptr, ...) @printf(ptr @str_format_int, i32 {val_reg})")
+            elif val_type == "Float":
+                self.current_fun_body.append(f"call i32 (ptr, ...) @printf(ptr @str_format_float, double {val_reg})")
+            elif val_type == "String":
+                self.current_fun_body.append(f"call i32 (ptr, ...) @printf(ptr @str_format_string, ptr {val_reg})")
+            else:
+                self.current_fun_body.append(f"call i32 (ptr, ...) @printf(ptr @str_format_int, i32 0)")
+            self.current_fun_body.append("call void @exit(i32 1)")
+        elif isinstance(node, TryCatchFinallyNode):
+            self.compile_block(node.try_block)
+            if node.finally_block:
+                self.compile_block(node.finally_block)
         elif isinstance(node, ImportNode) or isinstance(node, PackageNode):
             return
         else:

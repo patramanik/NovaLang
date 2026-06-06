@@ -92,47 +92,79 @@ match x {
 
 ---
 
-## 🛠️ Getting Started (Reference Implementation)
+## 🛠️ Getting Started & CLI Usage
 
-Currently, the repository contains the **Phase 1 Reference Implementation** written in Python. It includes a Lexer, recursive-descent Parser, AST walking Interpreter, and an interactive REPL.
+NovaLang includes a unified CLI package manager and execution tool. Use the wrapper script `.\nova.bat` (Windows) or `./nova` (Unix) to invoke subcommands:
 
 ### Prerequisites
 * **Python 3.13** or higher.
+* **LLVM Clang Compiler** (optional, required for Ahead-of-Time native binary compilation).
 
-### Running a `.nova` File
-To run a NovaLang script:
-```bash
-python -m novalang.main path/to/file.nova
-```
+### Subcommands
+* **`init <project_name>`**: Initialize a new standard modular project with configuration manifests.
+* **`run [file]`**: Execute a `.nova` file or compiled `.novac` bytecode. Add `--vm` flag to run via the stack-based Virtual Machine.
+* **`build [file]`**: Compile a `.nova` script. By default, compiles Ahead-of-Time (AOT) to LLVM IR (`.ll`) and native binary (`.exe` via Clang). Add `--vm` to compile to Virtual Machine bytecode (`.novac`).
+* **`repl`**: Run the interactive Read-Eval-Print Loop.
+* **`debug [file]`**: Launch the step-by-step console-based bytecode debugger.
+* **`lsp`**: Start the JSON-RPC Language Server daemon for IDE code diagnostics, hover tooltips, and autocomplete.
 
-### Launching the Interactive REPL
-To write NovaLang code interactively:
+---
+
+## 📦 Standard Library Package (`novalang/stdlib/`)
+
+NovaLang features a modularized standard library separated into separate files under `novalang/stdlib/`:
+
+* **`import math`**: `sqrt(x)`, `sin(x)`, `cos(x)`, `abs(x)`, `min(a,b)`, `max(a,b)`
+* **`import string`**: `upper(s)`, `lower(s)`, `split(s, sep)`, `join(items, sep)`
+* **`import io`**: `readline()`, `readfile(path)`, `writefile(path, content)`
+* **`import net`**: `request(url)`, `listen(port)`
+* **`import crypto`**: `sha256(s)`, `md5(s)`
+* **`import db`**: `connect(url)`, `query(conn, sql)`
+* **`import ai`**: `dot_product(v1, v2)`, `sigmoid(x)`
+* **`import collection`**: `list()`, `list_add(l, val)`, `list_get(l, idx)`, `list_len(l)`, `map()`, `map_set(m, k, v)`, `map_get(m, k)`, `map_has(m, k)`
+
+
+---
+
+## 📦 Packaging & Distribution
+
+NovaLang can be packaged for release as a Python package wheel or compiled to a standalone executable binary using the included build system:
+
+### 1. Build a Release
+Run the automated build script to generate packages in the `dist/` directory:
 ```bash
-python -m novalang.main
+python build_release.py
 ```
-Example session:
-```text
-NovaLang Interactive REPL (v1.3.0)
-Press Ctrl+C to clear current line, Ctrl+D to exit.
-nova> x = 10
-nova> y = 20
-nova> let z = x + y * 2
-nova> print(z)
-50
+This automatically produces:
+* **Python Package Wheel (`.whl`) & Source Tarball (`.tar.gz`)**: For standard pip distribution.
+* **Standalone Binary Executable (`nova` or `nova.exe`)**: Built via PyInstaller (if installed with `pip install pyinstaller`).
+
+### 2. Installation
+To install the package locally so that the `nova` CLI command is available globally:
+```bash
+pip install .
+```
+Alternatively, install the built wheel file directly:
+```bash
+pip install dist/novalang-1.0.0-py3-none-any.whl
+```
+Once installed, you can invoke the CLI from anywhere on your system:
+```bash
+nova repl
 ```
 
 ---
 
 ## 🧪 Verification & Testing
 
-NovaLang utilizes Python's built-in `unittest` framework to verify correct tokenization, parsing, AST generation, and execution states.
+NovaLang utilizes Python's built-in `unittest` framework to verify correct tokenization, parsing, AST generation, and execution states across all targets (Interpreter, VM, and LLVM/Clang Compiler).
 
 To run the automated test suite:
 ```bash
 python run_tests.py
 ```
 
-All core components (Lexer, Parser, AST, Interpreter, and REPL) are validated against strict criteria, including static type boundary checks and structural scoping.
+All core components and standard library operations are validated against strict type checks, scoping, and generational nursery garbage collection.
 
 ---
 

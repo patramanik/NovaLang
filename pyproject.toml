@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "novalang"
+version = "1.0.0"
+authors = [
+    { name="Manik Patra", email="manikpatra409@gmail.com" }
+]
+description = "NovaLang: The Universal Programming Language Ecosystem"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.scripts]
+nova = "novalang.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["novalang*"]

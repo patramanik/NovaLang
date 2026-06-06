@@ -71,6 +71,8 @@ class Frame:
         self.instructions = instructions
         self.pc = 0
         self.locals: Dict[str, Any] = locals_dict if locals_dict is not None else {}
+        self.handlers: List[dict] = []
+        self.pending_exception: Optional[Any] = None
 
 class VirtualMachine:
     def __init__(self, nursery_threshold: int = 15):
@@ -79,6 +81,35 @@ class VirtualMachine:
         self.frames: List[Frame] = []
         self.heap = VMHeap(nursery_threshold)
         self.functions: Dict[str, dict] = {}
+
+    def throw_exception(self, exc_obj) -> bool:
+        while self.frames:
+            frame = self.frames[-1]
+            if frame.handlers:
+                handler = frame.handlers.pop()
+                # Restore operand stack depth to pre-try level
+                depth = handler["stack_depth"]
+                while len(self.operand_stack) > depth:
+                    self.operand_stack.pop()
+                
+                # Jump to catch if present
+                if handler["catch"] != -1:
+                    frame.pc = handler["catch"]
+                    self.operand_stack.append(exc_obj)
+                    return True
+                # Jump to finally if catch not present
+                elif handler["finally"] != -1:
+                    frame.pending_exception = exc_obj
+                    frame.pc = handler["finally"]
+                    return True
+            # Unwind frame
+            self.frames.pop()
+            
+        # Uncaught exception
+        print(f"Uncaught Runtime Exception: {exc_obj.value}")
+        self.frames = []
+        self.last_val = exc_obj
+        return False
 
     def get_roots(self) -> List[VMObject]:
         roots: List[VMObject] = []
@@ -132,7 +163,42 @@ class VirtualMachine:
         frame.pc += 1
         op = instr[0]
         
-        if op == "LOAD_CONST":
+        try:
+            self._execute_opcode(op, instr, frame)
+        except Exception as e:
+            exc_obj = self.heap.allocate("String", str(e), self)
+            self.throw_exception(exc_obj)
+            
+        return len(self.frames) > 0
+
+    def _execute_opcode(self, op: str, instr: list, frame: Frame):
+        if op == "SETUP_TRY":
+            catch_idx = instr[1]
+            finally_idx = instr[2]
+            frame.handlers.append({
+                "catch": catch_idx,
+                "finally": finally_idx,
+                "stack_depth": len(self.operand_stack)
+            })
+            
+        elif op == "POP_TRY":
+            if frame.handlers:
+                frame.handlers.pop()
+                
+        elif op == "THROW":
+            exc_obj = self.operand_stack.pop()
+            self.throw_exception(exc_obj)
+            
+        elif op == "FINALLY_START":
+            pass
+            
+        elif op == "FINALLY_END":
+            if frame.pending_exception is not None:
+                exc = frame.pending_exception
+                frame.pending_exception = None
+                self.throw_exception(exc)
+                
+        elif op == "LOAD_CONST":
             val = instr[1]
             t = "String" if isinstance(val, str) else "Float" if isinstance(val, float) else "Bool" if isinstance(val, bool) else "Int" if isinstance(val, int) else "Null"
             obj = self.heap.allocate(t, val, self)
@@ -151,7 +217,10 @@ class VirtualMachine:
         elif op == "STORE_VAR":
             name = instr[1]
             val = self.operand_stack.pop()
-            frame.locals[name] = val
+            if frame.name == "main":
+                self.globals[name] = val
+            else:
+                frame.locals[name] = val
             self.last_val = val
             
         elif op == "LOAD_GLOBAL":
@@ -302,6 +371,12 @@ class VirtualMachine:
             self.frames.pop()
             self.operand_stack.append(val)
             self.last_val = val
+            
+        elif op == "ASM":
+            instructions = instr[1]
+            for instr_item in instructions:
+                print(f"[ASM VM Executed] {instr_item}")
+            self.operand_stack.append(self.heap.allocate("Null", None, self))
             
         elif op == "PRINT":
             val = self.operand_stack.pop()

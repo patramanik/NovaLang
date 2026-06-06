@@ -52,9 +52,9 @@ This checklist tracks the development progress of the NovaLang Universal Program
 
 ## [x] Phase 5: Advanced Library Support (Sprint 7)
 - [x] **Sprint 7: Standard Library**
-  - [x] Core IO (`std.io`) and String formatting (`std.string`)
-  - [x] Math functions (`std.math`) and Collections (`std.collection`)
-  - [x] Networking Sockets and HTTP Client/Server (`std.net`)
-  - [x] Cryptographic algorithms (`std.crypto`)
-  - [x] Database drivers (`std.database`)
-  - [x] Tensor math and Machine Learning bindings (`std.ai` & `std.ml`)
+  - [x] Core IO (`io`) and String formatting (`string`)
+  - [x] Math functions (`math`) and Collections (`collection`)
+  - [x] Networking Sockets and HTTP Client/Server (`net`)
+  - [x] Cryptographic algorithms (`crypto`)
+  - [x] Database drivers (`db`)
+  - [x] Tensor math and Machine Learning bindings (`ai`)

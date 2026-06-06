@@ -50,6 +50,7 @@ class FunctionDeclNode(ASTNode):
     params: List[tuple[str, Optional[str]]]  # List of (param_name, param_type)
     return_type: Optional[str]
     body: BlockNode
+    throws_types: Optional[List[str]] = None
 
 @dataclass
 class CallNode(ASTNode):
@@ -88,3 +89,20 @@ class PackageNode(ASTNode):
 class MemberAccessNode(ASTNode):
     object: ASTNode
     member: str
+
+@dataclass
+class AsmNode(ASTNode):
+    instructions: List[str]
+
+@dataclass
+class TryCatchFinallyNode(ASTNode):
+    try_block: BlockNode
+    catch_var: Optional[str]
+    catch_type: Optional[str]
+    catch_block: Optional[BlockNode]
+    finally_block: Optional[BlockNode]
+
+@dataclass
+class ThrowNode(ASTNode):
+    value: ASTNode
+

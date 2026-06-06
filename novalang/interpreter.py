@@ -2,11 +2,16 @@ from typing import Dict, Any, Optional, List
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode, AsmNode,
+    TryCatchFinallyNode, ThrowNode
 )
 
 class ReturnException(Exception):
     """Exception used to unwind call stacks for function returns."""
+    def __init__(self, value: Any):
+        self.value = value
+
+class NovaException(Exception):
     def __init__(self, value: Any):
         self.value = value
 
@@ -141,6 +146,49 @@ class Interpreter:
     def evaluate(self, node: ASTNode) -> Any:
         if isinstance(node, LiteralNode):
             return node.value
+            
+        elif isinstance(node, AsmNode):
+            for instr in node.instructions:
+                print(f"[ASM Executed] {instr}")
+            return None
+            
+        elif isinstance(node, ThrowNode):
+            val = self.evaluate(node.value)
+            raise NovaException(val)
+            
+        elif isinstance(node, TryCatchFinallyNode):
+            previous_env = self.environment
+            try:
+                # Execute try block
+                try_env = Environment(previous_env)
+                self.environment = try_env
+                for stmt in node.try_block.statements:
+                    self.evaluate(stmt)
+            except NovaException as e:
+                # Execute catch block if exception matches or no type specified
+                if node.catch_block:
+                    catch_env = Environment(previous_env)
+                    # Bind exception value to catch parameter
+                    if node.catch_var:
+                        catch_env.define(node.catch_var, e.value)
+                    self.environment = catch_env
+                    for stmt in node.catch_block.statements:
+                        self.evaluate(stmt)
+                else:
+                    # Reraise exception if no catch block is present (finally will still execute)
+                    raise e
+            finally:
+                # Restore parent environment and execute finally block
+                self.environment = previous_env
+                if node.finally_block:
+                    finally_env = Environment(previous_env)
+                    self.environment = finally_env
+                    try:
+                        for stmt in node.finally_block.statements:
+                            self.evaluate(stmt)
+                    finally:
+                        self.environment = previous_env
+            return None
             
         elif isinstance(node, IdentifierNode):
             return self.environment.get(node.name)

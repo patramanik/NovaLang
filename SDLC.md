@@ -277,7 +277,7 @@ The core engineering team is organized by domain expertise:
 * **Language Architect:** Governs grammar designs and language specs.
 * **Compiler Engineers:** Focuses on Lexer, Parser, AST, SSA-IR, and Optimizations.
 * **Runtime Engineers:** Manages VM interpreters, JIT compiling, and Garbage Collection.
-* **Standard Library Engineers:** Builds core APIs (`std.io`, `std.math`).
+* **Standard Library Engineers:** Builds core APIs (e.g., `io`, `math`).
 * **DevOps Engineers:** Main/Release pipelines and cloud registry instances.
 * **QA Engineers:** Writes test runners, fuzzers, and benchmarks.
 * **Technical Writers:** Documents grammar, setup instructions, and APIs.

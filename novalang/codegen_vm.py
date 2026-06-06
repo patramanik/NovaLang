@@ -2,7 +2,8 @@ from typing import List, Dict, Any
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode, AsmNode,
+    TryCatchFinallyNode, ThrowNode
 )
 
 class VMBytecodeGenerator:
@@ -80,6 +81,47 @@ class VMBytecodeGenerator:
     def compile_node(self, node: ASTNode, body: List[list]):
         if isinstance(node, LiteralNode):
             body.append(["LOAD_CONST", node.value])
+            
+        elif isinstance(node, AsmNode):
+            body.append(["ASM", node.instructions])
+            
+        elif isinstance(node, ThrowNode):
+            self.compile_node(node.value, body)
+            body.append(["THROW"])
+            
+        elif isinstance(node, TryCatchFinallyNode):
+            lbl_catch = self.next_label("catch") if node.catch_block else "none"
+            lbl_finally = self.next_label("finally") if node.finally_block else "none"
+            lbl_end = self.next_label("try_end")
+            
+            body.append(["SETUP_TRY", lbl_catch, lbl_finally])
+            self.compile_node(node.try_block, body)
+            body.append(["POP_TRY"])
+            if lbl_finally != "none":
+                body.append(["JUMP", lbl_finally])
+            else:
+                body.append(["JUMP", lbl_end])
+                
+            if node.catch_block:
+                body.append(["LABEL", lbl_catch])
+                if node.catch_var:
+                    body.append(["STORE_VAR", node.catch_var])
+                else:
+                    body.append(["POP"])
+                self.compile_node(node.catch_block, body)
+                if lbl_finally != "none":
+                    body.append(["JUMP", lbl_finally])
+                else:
+                    body.append(["JUMP", lbl_end])
+                    
+            if node.finally_block:
+                body.append(["LABEL", lbl_finally])
+                # We tell the VM we are entering finally block
+                body.append(["FINALLY_START"])
+                self.compile_node(node.finally_block, body)
+                body.append(["FINALLY_END"])
+                
+            body.append(["LABEL", lbl_end])
             
         elif isinstance(node, IdentifierNode):
             body.append(["LOAD_VAR", node.name])
@@ -242,6 +284,12 @@ class VMBytecodeGenerator:
                     resolved.append([instr[0], label_map[target]])
                 else:
                     raise RuntimeError(f"Jump to undefined label target: '{target}'")
+            elif instr[0] == "SETUP_TRY":
+                catch_target = instr[1]
+                finally_target = instr[2]
+                res_catch = label_map[catch_target] if catch_target in label_map else -1
+                res_finally = label_map[finally_target] if finally_target in label_map else -1
+                resolved.append(["SETUP_TRY", res_catch, res_finally])
             else:
                 resolved.append(instr)
                 
