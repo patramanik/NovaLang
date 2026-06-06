@@ -1,0 +1,128 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "NovaLang",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#operators" },
+    { "include": "#delimiters" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.nova",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.nova",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.nova",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.nova",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.nova",
+          "match": "\\b\\d+\\.\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.nova",
+          "match": "\\b\\d+\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.nova",
+          "match": "\\b(if|else|match|return|try|catch|while|for|in|break|continue)\\b"
+        },
+        {
+          "name": "storage.type.nova",
+          "match": "\\b(let|fun|class|interface|struct|enum|package|import|extends)\\b"
+        },
+        {
+          "name": "constant.language.nova",
+          "match": "\\b(true|false|null|self)\\b"
+        },
+        {
+          "name": "keyword.other.special.nova",
+          "match": "\\b(thread|async|await|unsafe|extern|asm)\\b"
+        },
+        {
+          "name": "support.function.builtin.nova",
+          "match": "\\b(print|str|int|float|len)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "entity.name.type.nova",
+          "match": "\\b(Int|Float|Bool|String)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.nova",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.nova",
+          "match": "\\+=|-=|\\*=|/=|="
+        },
+        {
+          "name": "keyword.operator.logical.nova",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.arithmetic.nova",
+          "match": "\\+|-|\\*|/|%|=>"
+        }
+      ]
+    },
+    "delimiters": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.nova",
+          "match": ","
+        },
+        {
+          "name": "punctuation.terminator.semicolon.nova",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.accessor.dot.nova",
+          "match": "\\."
+        },
+        {
+          "name": "punctuation.section.bracket.nova",
+          "match": "\\(|\\)|\\{|\\}|\\[|\\]"
+        }
+      ]
+    }
+  },
+  "scopeName": "source.nova"
+}

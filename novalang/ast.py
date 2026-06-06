@@ -75,3 +75,16 @@ class ReturnNode(ASTNode):
 class UnaryOpNode(ASTNode):
     op: str
     right: ASTNode
+
+@dataclass
+class ImportNode(ASTNode):
+    module_name: str
+
+@dataclass
+class PackageNode(ASTNode):
+    package_name: str
+
+@dataclass
+class MemberAccessNode(ASTNode):
+    object: ASTNode
+    member: str

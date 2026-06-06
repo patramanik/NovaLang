@@ -98,223 +98,325 @@ class VirtualMachine:
         return roots
 
     def run(self, bytecode: dict) -> Any:
+        self.init_execution(bytecode)
+        while self.step():
+            pass
+        # Unbox return value if any
+        if self.operand_stack:
+            return self.operand_stack[-1].value
+        return self.last_val.value if isinstance(self.last_val, VMObject) else self.last_val
+
+    def init_execution(self, bytecode: dict):
         self.operand_stack = []
         self.globals = {}
         self.frames = []
         self.functions = bytecode.get("functions", {})
+        self.last_val = None
         
         # Initialize with main function instructions
         main_instrs = bytecode.get("main", [])
-        if not main_instrs:
-            return None
-            
-        main_frame = Frame("main", main_instrs)
-        self.frames.append(main_frame)
-        
-        return self.execute_loop()
+        if main_instrs:
+            main_frame = Frame("main", main_instrs)
+            self.frames.append(main_frame)
 
-    def execute_loop(self) -> Any:
-        last_val = None
-        
-        while self.frames:
-            frame = self.frames[-1]
-            if frame.pc >= len(frame.instructions):
-                self.frames.pop()
-                continue
-                
-            instr = frame.instructions[frame.pc]
-            frame.pc += 1
-            op = instr[0]
+    def step(self) -> bool:
+        if not self.frames:
+            return False
             
-            if op == "LOAD_CONST":
-                val = instr[1]
-                t = "String" if isinstance(val, str) else "Float" if isinstance(val, float) else "Bool" if isinstance(val, bool) else "Int" if isinstance(val, int) else "Null"
-                obj = self.heap.allocate(t, val, self)
-                self.operand_stack.append(obj)
+        frame = self.frames[-1]
+        if frame.pc >= len(frame.instructions):
+            self.frames.pop()
+            return len(self.frames) > 0
+            
+        instr = frame.instructions[frame.pc]
+        frame.pc += 1
+        op = instr[0]
+        
+        if op == "LOAD_CONST":
+            val = instr[1]
+            t = "String" if isinstance(val, str) else "Float" if isinstance(val, float) else "Bool" if isinstance(val, bool) else "Int" if isinstance(val, int) else "Null"
+            obj = self.heap.allocate(t, val, self)
+            self.operand_stack.append(obj)
+            
+        elif op == "LOAD_VAR":
+            name = instr[1]
+            # Search local scope first, then globals
+            if name in frame.locals:
+                self.operand_stack.append(frame.locals[name])
+            elif name in self.globals:
+                self.operand_stack.append(self.globals[name])
+            else:
+                raise RuntimeError(f"Undefined variable reference: '{name}'")
                 
-            elif op == "LOAD_VAR":
-                name = instr[1]
-                # Search local scope first, then globals
-                if name in frame.locals:
-                    self.operand_stack.append(frame.locals[name])
-                elif name in self.globals:
-                    self.operand_stack.append(self.globals[name])
+        elif op == "STORE_VAR":
+            name = instr[1]
+            val = self.operand_stack.pop()
+            frame.locals[name] = val
+            self.last_val = val
+            
+        elif op == "LOAD_GLOBAL":
+            name = instr[1]
+            if name in self.globals:
+                self.operand_stack.append(self.globals[name])
+            else:
+                raise RuntimeError(f"Undefined global reference: '{name}'")
+                
+        elif op == "STORE_GLOBAL":
+            name = instr[1]
+            val = self.operand_stack.pop()
+            self.globals[name] = val
+            self.last_val = val
+            
+        elif op == "DUP":
+            if not self.operand_stack:
+                raise RuntimeError("Stack underflow on DUP")
+            self.operand_stack.append(self.operand_stack[-1])
+            
+        elif op == "POP":
+            if not self.operand_stack:
+                raise RuntimeError("Stack underflow on POP")
+            self.operand_stack.pop()
+            
+        elif op in ("ADD", "SUB", "MUL", "DIV", "MOD"):
+            right = self.operand_stack.pop()
+            left = self.operand_stack.pop()
+            
+            # Coercions if Float and Int mix
+            if left.type_name == "Float" or right.type_name == "Float":
+                res_val = float(left.value)
+                r_val = float(right.value)
+                t_res = "Float"
+            else:
+                res_val = left.value
+                r_val = right.value
+                t_res = "Int"
+                
+            if op == "ADD":
+                if left.type_name == "String" or right.type_name == "String":
+                    res_val = str(left.value) + str(right.value)
+                    t_res = "String"
                 else:
-                    raise RuntimeError(f"Undefined variable reference: '{name}'")
-                    
-            elif op == "STORE_VAR":
-                name = instr[1]
-                val = self.operand_stack.pop()
-                frame.locals[name] = val
-                last_val = val
+                    res_val = res_val + r_val
+            elif op == "SUB":
+                res_val = res_val - r_val
+            elif op == "MUL":
+                res_val = res_val * r_val
+            elif op == "DIV":
+                res_val = res_val / r_val
+            elif op == "MOD":
+                res_val = res_val % r_val
                 
-            elif op == "LOAD_GLOBAL":
-                name = instr[1]
-                if name in self.globals:
-                    self.operand_stack.append(self.globals[name])
-                else:
-                    raise RuntimeError(f"Undefined global reference: '{name}'")
-                    
-            elif op == "STORE_GLOBAL":
-                name = instr[1]
-                val = self.operand_stack.pop()
-                self.globals[name] = val
-                last_val = val
+            obj = self.heap.allocate(t_res, res_val, self)
+            self.operand_stack.append(obj)
+            
+        elif op in ("EQ", "NE", "LT", "GT", "LE", "GE"):
+            right = self.operand_stack.pop()
+            left = self.operand_stack.pop()
+            
+            if op == "EQ":
+                res = (left.value == right.value)
+            elif op == "NE":
+                res = (left.value != right.value)
+            elif op == "LT":
+                res = (left.value < right.value)
+            elif op == "GT":
+                res = (left.value > right.value)
+            elif op == "LE":
+                res = (left.value <= right.value)
+            elif op == "GE":
+                res = (left.value >= right.value)
                 
-            elif op == "DUP":
-                if not self.operand_stack:
-                    raise RuntimeError("Stack underflow on DUP")
-                self.operand_stack.append(self.operand_stack[-1])
-                
-            elif op == "POP":
-                if not self.operand_stack:
-                    raise RuntimeError("Stack underflow on POP")
-                self.operand_stack.pop()
-                
-            elif op in ("ADD", "SUB", "MUL", "DIV", "MOD"):
-                right = self.operand_stack.pop()
-                left = self.operand_stack.pop()
-                
-                # Coercions if Float and Int mix
-                if left.type_name == "Float" or right.type_name == "Float":
-                    res_val = float(left.value)
-                    r_val = float(right.value)
-                    t_res = "Float"
-                else:
-                    res_val = left.value
-                    r_val = right.value
-                    t_res = "Int"
-                    
-                if op == "ADD":
-                    if left.type_name == "String" or right.type_name == "String":
-                        res_val = str(left.value) + str(right.value)
-                        t_res = "String"
-                    else:
-                        res_val = res_val + r_val
-                elif op == "SUB":
-                    res_val = res_val - r_val
-                elif op == "MUL":
-                    res_val = res_val * r_val
-                elif op == "DIV":
-                    res_val = res_val / r_val
-                elif op == "MOD":
-                    res_val = res_val % r_val
-                    
-                obj = self.heap.allocate(t_res, res_val, self)
-                self.operand_stack.append(obj)
-                
-            elif op in ("EQ", "NE", "LT", "GT", "LE", "GE"):
-                right = self.operand_stack.pop()
-                left = self.operand_stack.pop()
-                
-                if op == "EQ":
-                    res = (left.value == right.value)
-                elif op == "NE":
-                    res = (left.value != right.value)
-                elif op == "LT":
-                    res = (left.value < right.value)
-                elif op == "GT":
-                    res = (left.value > right.value)
-                elif op == "LE":
-                    res = (left.value <= right.value)
-                elif op == "GE":
-                    res = (left.value >= right.value)
-                    
-                obj = self.heap.allocate("Bool", res, self)
-                self.operand_stack.append(obj)
-                
-            elif op == "NOT":
-                val = self.operand_stack.pop()
-                obj = self.heap.allocate("Bool", not val.value, self)
-                self.operand_stack.append(obj)
-                
-            elif op == "NEG":
-                val = self.operand_stack.pop()
-                t = val.type_name
-                obj = self.heap.allocate(t, -val.value, self)
-                self.operand_stack.append(obj)
-                
-            elif op == "JUMP":
-                idx = instr[1]
+            obj = self.heap.allocate("Bool", res, self)
+            self.operand_stack.append(obj)
+            
+        elif op == "NOT":
+            val = self.operand_stack.pop()
+            obj = self.heap.allocate("Bool", not val.value, self)
+            self.operand_stack.append(obj)
+            
+        elif op == "NEG":
+            val = self.operand_stack.pop()
+            t = val.type_name
+            obj = self.heap.allocate(t, -val.value, self)
+            self.operand_stack.append(obj)
+            
+        elif op == "JUMP":
+            idx = instr[1]
+            frame.pc = idx
+            
+        elif op == "JUMP_IF_FALSE":
+            idx = instr[1]
+            cond = self.operand_stack.pop()
+            if cond.value is None or cond.value is False or cond.value == 0:
                 frame.pc = idx
                 
-            elif op == "JUMP_IF_FALSE":
-                idx = instr[1]
-                cond = self.operand_stack.pop()
-                # Treat None/false/0 as falsy
-                if cond.value is None or cond.value is False or cond.value == 0:
-                    frame.pc = idx
-                    
-            elif op == "CALL":
-                func_name = instr[1]
-                arg_count = instr[2]
-                
-                # Pop arguments
-                args = []
-                for _ in range(arg_count):
-                    args.append(self.operand_stack.pop())
-                args.reverse()
-                
-                # Check builtins
-                if func_name == "print":
-                    # Print helper
-                    out = " ".join([str(a.value) for a in args])
-                    print(out)
-                    last_val = args[-1] if args else None
-                    self.operand_stack.append(self.heap.allocate("Null", None, self))
-                elif func_name == "str":
-                    obj = self.heap.allocate("String", str(args[0].value), self)
-                    self.operand_stack.append(obj)
-                elif func_name == "int":
-                    obj = self.heap.allocate("Int", int(args[0].value), self)
-                    self.operand_stack.append(obj)
-                elif func_name == "float":
-                    obj = self.heap.allocate("Float", float(args[0].value), self)
-                    self.operand_stack.append(obj)
-                elif func_name == "len":
-                    obj = self.heap.allocate("Int", len(str(args[0].value)), self)
-                    self.operand_stack.append(obj)
-                else:
-                    if func_name not in self.functions:
-                        raise RuntimeError(f"Undefined function reference: '{func_name}'")
-                    
-                    func_info = self.functions[func_name]
-                    params = func_info.get("params", [])
-                    if len(args) != len(params):
-                        raise RuntimeError(f"Argument count mismatch calling '{func_name}'")
-                        
-                    # Build local dict mapping parameters to values
-                    local_vars = {}
-                    for param, arg in zip(params, args):
-                        # Param can be parameter name or tuple (name, type)
-                        param_name = param[0] if isinstance(param, list) else param
-                        local_vars[param_name] = arg
-                        
-                    new_frame = Frame(func_name, func_info["body"], local_vars)
-                    self.frames.append(new_frame)
-                    
-            elif op == "RETURN":
-                val = self.operand_stack.pop() if self.operand_stack else self.heap.allocate("Null", None, self)
-                # Pop the active frame
-                self.frames.pop()
-                # Push value back to caller frame stack
-                self.operand_stack.append(val)
-                last_val = val
-                
-            elif op == "PRINT":
-                val = self.operand_stack.pop()
-                print(val.value)
-                last_val = val
+        elif op == "CALL":
+            func_name = instr[1]
+            arg_count = instr[2]
+            
+            args = []
+            for _ in range(arg_count):
+                args.append(self.operand_stack.pop())
+            args.reverse()
+            
+            if func_name == "print":
+                out = " ".join([str(a.value) for a in args])
+                print(out)
+                self.last_val = args[-1] if args else None
                 self.operand_stack.append(self.heap.allocate("Null", None, self))
-                
-            elif op == "HALT":
-                self.frames = []
-                break
-                
+            elif func_name == "str":
+                obj = self.heap.allocate("String", str(args[0].value), self)
+                self.operand_stack.append(obj)
+            elif func_name == "int":
+                obj = self.heap.allocate("Int", int(args[0].value), self)
+                self.operand_stack.append(obj)
+            elif func_name == "float":
+                obj = self.heap.allocate("Float", float(args[0].value), self)
+                self.operand_stack.append(obj)
+            elif func_name == "len":
+                obj = self.heap.allocate("Int", len(str(args[0].value)), self)
+                self.operand_stack.append(obj)
+            elif func_name == "math.sqrt":
+                import math
+                obj = self.heap.allocate("Float", float(math.sqrt(args[0].value)), self)
+                self.operand_stack.append(obj)
+            elif func_name == "math.sin":
+                import math
+                obj = self.heap.allocate("Float", float(math.sin(args[0].value)), self)
+                self.operand_stack.append(obj)
+            elif func_name == "math.cos":
+                import math
+                obj = self.heap.allocate("Float", float(math.cos(args[0].value)), self)
+                self.operand_stack.append(obj)
+            elif func_name == "math.abs":
+                obj = self.heap.allocate(args[0].type_name, abs(args[0].value), self)
+                self.operand_stack.append(obj)
+            elif func_name == "math.min":
+                v1, v2 = args[0].value, args[1].value
+                t = "Float" if args[0].type_name == "Float" or args[1].type_name == "Float" else "Int"
+                obj = self.heap.allocate(t, min(v1, v2), self)
+                self.operand_stack.append(obj)
+            elif func_name == "math.max":
+                v1, v2 = args[0].value, args[1].value
+                t = "Float" if args[0].type_name == "Float" or args[1].type_name == "Float" else "Int"
+                obj = self.heap.allocate(t, max(v1, v2), self)
+                self.operand_stack.append(obj)
+            elif func_name == "string.upper":
+                obj = self.heap.allocate("String", str(args[0].value).upper(), self)
+                self.operand_stack.append(obj)
+            elif func_name == "string.lower":
+                obj = self.heap.allocate("String", str(args[0].value).lower(), self)
+                self.operand_stack.append(obj)
+            elif func_name == "string.split":
+                parts = str(args[0].value).split(str(args[1].value))
+                wrapped_parts = [self.heap.allocate("String", p, self) for p in parts]
+                obj = self.heap.allocate("List", wrapped_parts, self)
+                self.operand_stack.append(obj)
+            elif func_name == "string.join":
+                items = [str(x.value) for x in args[0].value]
+                sep = str(args[1].value)
+                obj = self.heap.allocate("String", sep.join(items), self)
+                self.operand_stack.append(obj)
+            elif func_name == "io.readline":
+                val = sys.stdin.readline().rstrip("\r\n")
+                obj = self.heap.allocate("String", val, self)
+                self.operand_stack.append(obj)
+            elif func_name == "io.readfile":
+                with open(args[0].value, "r", encoding="utf-8") as f:
+                    content = f.read()
+                obj = self.heap.allocate("String", content, self)
+                self.operand_stack.append(obj)
+            elif func_name == "io.writefile":
+                with open(args[0].value, "w", encoding="utf-8") as f:
+                    f.write(str(args[1].value))
+                obj = self.heap.allocate("Null", None, self)
+                self.operand_stack.append(obj)
+            elif func_name == "net.request":
+                import urllib.request
+                try:
+                    with urllib.request.urlopen(str(args[0].value), timeout=5) as response:
+                        res_val = response.read().decode('utf-8')
+                except Exception as e:
+                    res_val = f"Error: {e}"
+                obj = self.heap.allocate("String", res_val, self)
+                self.operand_stack.append(obj)
+            elif func_name == "net.listen":
+                res_val = f"Server listening on port {args[0].value}"
+                obj = self.heap.allocate("String", res_val, self)
+                self.operand_stack.append(obj)
+            elif func_name == "crypto.sha256":
+                import hashlib
+                val = hashlib.sha256(str(args[0].value).encode('utf-8')).hexdigest()
+                obj = self.heap.allocate("String", val, self)
+                self.operand_stack.append(obj)
+            elif func_name == "crypto.md5":
+                import hashlib
+                val = hashlib.md5(str(args[0].value).encode('utf-8')).hexdigest()
+                obj = self.heap.allocate("String", val, self)
+                self.operand_stack.append(obj)
+            elif func_name == "db.connect":
+                import sqlite3
+                conn = sqlite3.connect(str(args[0].value))
+                obj = self.heap.allocate("DbConnection", conn, self)
+                self.operand_stack.append(obj)
+            elif func_name == "db.query":
+                conn = args[0].value
+                sql = str(args[1].value)
+                cursor = conn.cursor()
+                cursor.execute(sql)
+                conn.commit()
+                rows = cursor.fetchall()
+                wrapped_rows = []
+                for row in rows:
+                    wrapped_row = [self.heap.allocate("String", str(val), self) for val in row]
+                    wrapped_rows.append(self.heap.allocate("List", wrapped_row, self))
+                obj = self.heap.allocate("List", wrapped_rows, self)
+                self.operand_stack.append(obj)
+            elif func_name == "ai.dot_product":
+                v1 = [float(x.value) for x in args[0].value]
+                v2 = [float(x.value) for x in args[1].value]
+                val = sum(x*y for x, y in zip(v1, v2))
+                obj = self.heap.allocate("Float", val, self)
+                self.operand_stack.append(obj)
+            elif func_name == "ai.sigmoid":
+                import math
+                val = 1.0 / (1.0 + math.exp(-float(args[0].value)))
+                obj = self.heap.allocate("Float", val, self)
+                self.operand_stack.append(obj)
             else:
-                raise RuntimeError(f"Invalid bytecode operation: '{op}'")
+                if func_name not in self.functions:
+                    raise RuntimeError(f"Undefined function reference: '{func_name}'")
                 
-        # Unbox return value if any
-        if self.operand_stack:
-            return self.operand_stack[-1].value
-        return last_val.value if isinstance(last_val, VMObject) else last_val
+                func_info = self.functions[func_name]
+                params = func_info.get("params", [])
+                if len(args) != len(params):
+                    raise RuntimeError(f"Argument count mismatch calling '{func_name}'")
+                    
+                local_vars = {}
+                for param, arg in zip(params, args):
+                    param_name = param[0] if isinstance(param, list) else param
+                    local_vars[param_name] = arg
+                    
+                new_frame = Frame(func_name, func_info["body"], local_vars)
+                self.frames.append(new_frame)
+                
+        elif op == "RETURN":
+            val = self.operand_stack.pop() if self.operand_stack else self.heap.allocate("Null", None, self)
+            self.frames.pop()
+            self.operand_stack.append(val)
+            self.last_val = val
+            
+        elif op == "PRINT":
+            val = self.operand_stack.pop()
+            print(val.value)
+            self.last_val = val
+            self.operand_stack.append(self.heap.allocate("Null", None, self))
+            
+        elif op == "HALT":
+            self.frames = []
+            return False
+            
+        else:
+            raise RuntimeError(f"Invalid bytecode operation: '{op}'")
+            
+        return len(self.frames) > 0

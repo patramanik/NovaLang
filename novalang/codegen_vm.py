@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
 )
 
 class VMBytecodeGenerator:
@@ -105,8 +105,11 @@ class VMBytecodeGenerator:
                 self.compile_node(arg, body)
             if isinstance(node.func, IdentifierNode):
                 body.append(["CALL", node.func.name, len(node.args)])
+            elif isinstance(node.func, MemberAccessNode):
+                func_name = self.get_member_access_path(node.func)
+                body.append(["CALL", func_name, len(node.args)])
             else:
-                raise RuntimeError("VM codegen requires function call target to be an Identifier")
+                raise RuntimeError("VM codegen requires function call target to be an Identifier or MemberAccess")
                 
         elif isinstance(node, IfNode):
             self.compile_node(node.condition, body)
@@ -202,8 +205,23 @@ class VMBytecodeGenerator:
             else:
                 raise RuntimeError(f"VM codegen doesn't support unary operator '{node.op}'")
                 
+        elif isinstance(node, ImportNode) or isinstance(node, PackageNode):
+            pass
+            
+        elif isinstance(node, MemberAccessNode):
+            name = self.get_member_access_path(node)
+            body.append(["LOAD_VAR", name])
+            
         else:
             raise RuntimeError(f"VM codegen doesn't support AST node type: {type(node).__name__}")
+
+    def get_member_access_path(self, node: ASTNode) -> str:
+        if isinstance(node, IdentifierNode):
+            return node.name
+        elif isinstance(node, MemberAccessNode):
+            obj_path = self.get_member_access_path(node.object)
+            return f"{obj_path}.{node.member}"
+        raise RuntimeError("Invalid member access path")
 
     def resolve_labels(self, instrs: List[list]) -> List[list]:
         label_map = {}

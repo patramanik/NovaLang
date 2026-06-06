@@ -3,7 +3,7 @@ from novalang.lexer import Token, TokenType
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
 )
 
 class Parser:
@@ -96,10 +96,28 @@ class Parser:
             return self.parse_print_statement()
         elif self.check(TokenType.RETURN):
             return self.parse_return_statement()
+        elif self.match(TokenType.IMPORT):
+            return self.parse_import_statement()
+        elif self.match(TokenType.PACKAGE):
+            return self.parse_package_statement()
         elif self.check(TokenType.LBRACE):
             return self.parse_block()
         else:
             return self.parse_assignment_or_expression()
+
+    def parse_import_statement(self) -> ASTNode:
+        name_parts = [self.consume(TokenType.IDENTIFIER, "Expected module name after 'import'").value]
+        while self.match(TokenType.DOT):
+            name_parts.append(self.consume(TokenType.IDENTIFIER, "Expected identifier after '.'").value)
+        module_name = ".".join(name_parts)
+        return ImportNode(module_name)
+
+    def parse_package_statement(self) -> ASTNode:
+        name_parts = [self.consume(TokenType.IDENTIFIER, "Expected package name after 'package'").value]
+        while self.match(TokenType.DOT):
+            name_parts.append(self.consume(TokenType.IDENTIFIER, "Expected identifier after '.'").value)
+        package_name = ".".join(name_parts)
+        return PackageNode(package_name)
 
     def parse_return_statement(self) -> ASTNode:
         self.consume(TokenType.RETURN, "Expected 'return'")
@@ -298,9 +316,28 @@ class Parser:
             op_tok = self.advance()
             right = self.parse_unary()
             return UnaryOpNode(op_tok.value, right)
-        return self.parse_primary()
+        return self.parse_postfix()
 
-    def parse_primary(self) -> ASTNode:
+    def parse_postfix(self) -> ASTNode:
+        expr = self.parse_primary_value()
+        while True:
+            if self.match(TokenType.DOT):
+                member_tok = self.consume(TokenType.IDENTIFIER, "Expected identifier after '.'")
+                expr = MemberAccessNode(expr, member_tok.value)
+            elif self.match(TokenType.LPAREN):
+                args = []
+                if not self.check(TokenType.RPAREN):
+                    while True:
+                        args.append(self.parse_expression())
+                        if not self.match(TokenType.COMMA):
+                            break
+                self.consume(TokenType.RPAREN, "Expected ')' after arguments list")
+                expr = CallNode(expr, args)
+            else:
+                break
+        return expr
+
+    def parse_primary_value(self) -> ASTNode:
         tok = self.current_token()
         
         if self.match(TokenType.INTEGER):
@@ -317,16 +354,6 @@ class Parser:
             return LiteralNode(None)
         elif self.check(TokenType.IDENTIFIER):
             ident = self.advance()
-            # Check if this is a function call: identifier(args)
-            if self.match(TokenType.LPAREN):
-                args = []
-                if not self.check(TokenType.RPAREN):
-                    while True:
-                        args.append(self.parse_expression())
-                        if not self.match(TokenType.COMMA):
-                            break
-                self.consume(TokenType.RPAREN, "Expected ')' after arguments list")
-                return CallNode(IdentifierNode(ident.value), args)
             return IdentifierNode(ident.value)
         elif self.match(TokenType.LPAREN):
             expr = self.parse_expression()

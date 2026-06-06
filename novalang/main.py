@@ -11,8 +11,44 @@ from novalang.repl import run_repl
 from novalang.compiler import LLVMCompiler
 from novalang.codegen_vm import VMBytecodeGenerator
 from novalang.vm import VirtualMachine
+from novalang.lsp import start_lsp_server
 
 import tomllib
+
+def debug_file(path: str) -> bool:
+    if not os.path.exists(path):
+        print(f"Error: File '{path}' not found.", file=sys.stderr)
+        return False
+        
+    if path.endswith(".novac"):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                bytecode = json.load(f)
+        except Exception as e:
+            print(f"Error loading bytecode: {e}", file=sys.stderr)
+            return False
+    else:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                source = f.read()
+            lexer = Lexer(source)
+            tokens = lexer.tokenize()
+            parser = Parser(tokens)
+            ast = parser.parse()
+            if parser.errors:
+                for err in parser.errors:
+                    print(err, file=sys.stderr)
+                return False
+            codegen = VMBytecodeGenerator()
+            bytecode = codegen.generate(ast)
+        except Exception as e:
+            print(f"Compilation Error: {e}", file=sys.stderr)
+            return False
+            
+    from novalang.debug import VMDebugger
+    debugger = VMDebugger(bytecode)
+    debugger.run()
+    return True
 
 def run_file(path: str, use_vm: bool = False) -> bool:
     if not os.path.exists(path):
@@ -278,6 +314,8 @@ Commands:
   build [file]    Parse and validate the project entry point or a specific file
                   Use --vm flag to compile to a .novac bytecode file
   repl            Launch the interactive Read-Eval-Print Loop
+  lsp             Launch the Language Server Protocol (LSP) daemon on stdio
+  debug [file]    Launch the interactive bytecode debugger on a file
   help            Show this help documentation
   version         Show the version of NovaLang
 
@@ -298,7 +336,7 @@ def main():
 
     cmd = sys.argv[1]
 
-    if cmd in ("init", "run", "build", "repl", "help", "version", "-h", "--help", "-v", "--version"):
+    if cmd in ("init", "run", "build", "repl", "help", "version", "-h", "--help", "-v", "--version", "lsp", "debug"):
         if cmd == "init":
             if len(sys.argv) < 3:
                 print("Error: Missing project name. Usage: nova init <name>", file=sys.stderr)
@@ -348,6 +386,26 @@ def main():
                     
         elif cmd == "repl":
             run_repl()
+            
+        elif cmd == "lsp":
+            start_lsp_server()
+            
+        elif cmd == "debug":
+            if len(sys.argv) >= 3:
+                target = sys.argv[2]
+                if os.path.isdir(target):
+                    target = os.path.join(target, "src", "main.nova")
+                if not debug_file(target):
+                    sys.exit(1)
+            else:
+                toml_dir = find_toml_dir()
+                if not toml_dir:
+                    print("Error: Could not find a 'nova.toml' in this directory or any parent directories.", file=sys.stderr)
+                    sys.exit(1)
+                load_manifest(toml_dir)
+                entry_point = os.path.join(toml_dir, "src", "main.nova")
+                if not debug_file(entry_point):
+                    sys.exit(1)
             
         elif cmd in ("help", "-h", "--help"):
             print_help()

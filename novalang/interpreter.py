@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, List
 from novalang.ast import (
     ASTNode, Program, LetNode, AssignNode, BinaryOpNode, LiteralNode,
     IdentifierNode, PrintNode, BlockNode, FunctionDeclNode, CallNode, IfNode, MatchNode, ReturnNode,
-    UnaryOpNode
+    UnaryOpNode, ImportNode, PackageNode, MemberAccessNode
 )
 
 class ReturnException(Exception):
@@ -264,4 +264,94 @@ class Interpreter:
             val = self.evaluate(node.value) if node.value else None
             raise ReturnException(val)
             
+        elif isinstance(node, ImportNode):
+            mod = self.load_stdlib_module(node.module_name)
+            self.environment.define(node.module_name, mod, is_const=True)
+            return mod
+            
+        elif isinstance(node, PackageNode):
+            return None
+            
+        elif isinstance(node, MemberAccessNode):
+            obj = self.evaluate(node.object)
+            if isinstance(obj, dict):
+                if node.member in obj:
+                    return obj[node.member]
+                else:
+                    raise RuntimeError(f"Member '{node.member}' not found in module")
+            raise RuntimeError(f"Cannot perform member access on non-object of type '{type(obj).__name__}'")
+            
         raise RuntimeError(f"Unknown AST node type: {type(node).__name__}")
+
+    def load_stdlib_module(self, name: str) -> dict:
+        import math
+        import hashlib
+        import sys
+        
+        if name == "math":
+            return {
+                "sqrt": lambda x: float(math.sqrt(x)),
+                "sin": lambda x: float(math.sin(x)),
+                "cos": lambda x: float(math.cos(x)),
+                "abs": lambda x: abs(x),
+                "min": lambda a, b: min(a, b),
+                "max": lambda a, b: max(a, b)
+            }
+        elif name == "string":
+            return {
+                "upper": lambda s: s.upper(),
+                "lower": lambda s: s.lower(),
+                "split": lambda s, sep: s.split(sep),
+                "join": lambda items, sep: sep.join(items)
+            }
+        elif name == "io":
+            def readfile(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+            def writefile(path, content):
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            return {
+                "readline": lambda: sys.stdin.readline().rstrip("\r\n"),
+                "readfile": readfile,
+                "writefile": writefile
+            }
+        elif name == "net":
+            def http_request(url):
+                import urllib.request
+                try:
+                    with urllib.request.urlopen(url, timeout=5) as response:
+                        return response.read().decode('utf-8')
+                except Exception as e:
+                    return f"Error: {e}"
+            return {
+                "request": http_request,
+                "listen": lambda port: f"Server listening on port {port}"
+            }
+        elif name == "crypto":
+            return {
+                "sha256": lambda s: hashlib.sha256(s.encode('utf-8')).hexdigest(),
+                "md5": lambda s: hashlib.md5(s.encode('utf-8')).hexdigest()
+            }
+        elif name == "db":
+            import sqlite3
+            def db_query(conn, sql):
+                cursor = conn.cursor()
+                cursor.execute(sql)
+                conn.commit()
+                return cursor.fetchall()
+            return {
+                "connect": lambda url: sqlite3.connect(url),
+                "query": db_query
+            }
+        elif name == "ai":
+            def dot_prod(a, b):
+                return sum(x*y for x, y in zip(a, b))
+            def sigmoid(x):
+                return 1.0 / (1.0 + math.exp(-x))
+            return {
+                "dot_product": dot_prod,
+                "sigmoid": sigmoid
+            }
+        else:
+            raise RuntimeError(f"Standard library module '{name}' not found")

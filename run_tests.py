@@ -1,4 +1,5 @@
 import unittest
+from typing import Any
 from novalang.lexer import Lexer, TokenType
 from novalang.parser import Parser
 from novalang.ast import LiteralNode, IdentifierNode, LetNode, AssignNode, BinaryOpNode
@@ -394,6 +395,201 @@ class TestVM(unittest.TestCase):
         self.assertGreater(vm.heap.gc_count, 0)
         self.assertGreater(vm.heap.promotion_count, 0)
         self.assertEqual(res, 136)
+
+class TestTooling(unittest.TestCase):
+    def test_lsp_initialize(self):
+        import novalang.lsp
+        captured = []
+        old_write = novalang.lsp.write_message
+        novalang.lsp.write_message = lambda msg: captured.append(msg)
+        
+        try:
+            req = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+            novalang.lsp.handle_request(req)
+            
+            self.assertEqual(len(captured), 1)
+            res = captured[0]
+            self.assertEqual(res["id"], 1)
+            self.assertIn("capabilities", res["result"])
+            self.assertTrue(res["result"]["capabilities"]["hoverProvider"])
+        finally:
+            novalang.lsp.write_message = old_write
+
+    def test_lsp_diagnostics_error(self):
+        import novalang.lsp
+        captured = []
+        old_write = novalang.lsp.write_message
+        novalang.lsp.write_message = lambda msg: captured.append(msg)
+        
+        try:
+            # Code with syntax error (missing value after let)
+            err_code = "let x = "
+            novalang.lsp.publish_diagnostics("file:///test.nova", err_code)
+            
+            self.assertEqual(len(captured), 1)
+            res = captured[0]
+            self.assertEqual(res["method"], "textDocument/publishDiagnostics")
+            self.assertEqual(res["params"]["uri"], "file:///test.nova")
+            self.assertGreater(len(res["params"]["diagnostics"]), 0)
+            self.assertIn("Parser Error", res["params"]["diagnostics"][0]["message"])
+        finally:
+            novalang.lsp.write_message = old_write
+
+    def test_lsp_completion_and_hover(self):
+        import novalang.lsp
+        completions = novalang.lsp.get_completions()
+        labels = [c["label"] for c in completions]
+        self.assertIn("let", labels)
+        self.assertIn("print", labels)
+        self.assertIn("Int", labels)
+        
+        # Test hover
+        novalang.lsp.documents["file:///test.nova"] = "print(10)"
+        hover = novalang.lsp.get_hover_result("file:///test.nova", 0, 1) # hovering 'print'
+        self.assertIsNotNone(hover)
+        self.assertIn("**print(value)**", hover["contents"]["value"])
+
+    def test_vm_debugger_stepping(self):
+        from novalang.codegen_vm import VMBytecodeGenerator
+        from novalang.debug import VMDebugger
+        source = """
+        x = 5
+        y = 10
+        """
+        lexer = Lexer(source)
+        ast = Parser(lexer.tokenize()).parse()
+        bytecode = VMBytecodeGenerator().generate(ast)
+        
+        debugger = VMDebugger(bytecode)
+        debugger.vm.init_execution(bytecode)
+        
+        # Step once (executes LOAD_CONST 5)
+        has_more = debugger.vm.step()
+        self.assertTrue(has_more)
+        self.assertEqual(len(debugger.vm.operand_stack), 1)
+        self.assertEqual(debugger.vm.operand_stack[0].value, 5)
+
+class TestStdlib(unittest.TestCase):
+    def run_expr_test(self, source: str, expected_val: Any, expected_ir_sub: str = None):
+        from novalang.codegen_vm import VMBytecodeGenerator
+        from novalang.vm import VirtualMachine
+        from novalang.compiler import LLVMCompiler
+        
+        # 1. Interpreter
+        lexer = Lexer(source)
+        ast = Parser(lexer.tokenize()).parse()
+        interpreter = Interpreter()
+        interp_res = interpreter.interpret(ast)
+        
+        # 2. VM
+        bytecode = VMBytecodeGenerator().generate(ast)
+        vm = VirtualMachine()
+        vm_res = vm.run(bytecode)
+        
+        # Compare Interpreter and VM
+        if isinstance(expected_val, float):
+            self.assertAlmostEqual(interp_res, expected_val)
+            self.assertAlmostEqual(vm_res, expected_val)
+        else:
+            self.assertEqual(interp_res, expected_val)
+            self.assertEqual(vm_res, expected_val)
+            
+        # 3. LLVM Compiler
+        if expected_ir_sub:
+            compiler = LLVMCompiler()
+            ir = compiler.compile(ast)
+            self.assertIn(expected_ir_sub, ir)
+
+    def test_math_stdlib(self):
+        self.run_expr_test("import math\nmath.sqrt(16.0)", 4.0, "declare double @sqrt(double)")
+        self.run_expr_test("import math\nmath.abs(-5.5)", 5.5, "declare double @fabs(double)")
+        self.run_expr_test("import math\nmath.min(10, 20)", 10, "select i1")
+        self.run_expr_test("import math\nmath.max(3.5, 1.2)", 3.5, "fcmp ogt double")
+        self.run_expr_test("import math\nmath.sin(0.0)", 0.0, "declare double @sin(double)")
+        self.run_expr_test("import math\nmath.cos(0.0)", 1.0, "declare double @cos(double)")
+
+    def test_string_stdlib(self):
+        self.run_expr_test("import string\nstring.upper(\"hello\")", "HELLO", "getelementptr inbounds")
+        self.run_expr_test("import string\nstring.lower(\"WORLD\")", "world", "getelementptr inbounds")
+        
+        # Test split and join together
+        source = """
+        import string
+        string.join(string.split("a,b,c", ","), "-")
+        """
+        self.run_expr_test(source, "a-b-c", "getelementptr inbounds")
+
+    def test_io_stdlib(self):
+        source = """
+        import io
+        io.writefile("test_stdlib.txt", "hello stdlib")
+        io.readfile("test_stdlib.txt")
+        """
+        try:
+            self.run_expr_test(source, "hello stdlib", "mock file content")
+        finally:
+            import os
+            if os.path.exists("test_stdlib.txt"):
+                os.remove("test_stdlib.txt")
+
+    def test_net_stdlib(self):
+        self.run_expr_test("import net\nnet.listen(8080)", "Server listening on port 8080", "Server listening on port...")
+        
+        # net.request will either get a response or fail with "Error:"
+        source = "import net\nnet.request(\"http://localhost:8080\")"
+        lexer = Lexer(source)
+        ast = Parser(lexer.tokenize()).parse()
+        
+        interpreter = Interpreter()
+        interp_res = interpreter.interpret(ast)
+        self.assertTrue(isinstance(interp_res, str))
+        
+        from novalang.codegen_vm import VMBytecodeGenerator
+        from novalang.vm import VirtualMachine
+        bytecode = VMBytecodeGenerator().generate(ast)
+        vm = VirtualMachine()
+        vm_res = vm.run(bytecode)
+        self.assertTrue(isinstance(vm_res, str))
+        
+        from novalang.compiler import LLVMCompiler
+        compiler = LLVMCompiler()
+        ir = compiler.compile(ast)
+        self.assertIn("mock response", ir)
+
+    def test_crypto_stdlib(self):
+        self.run_expr_test("import crypto\ncrypto.sha256(\"test\")", "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        self.run_expr_test("import crypto\ncrypto.md5(\"test\")", "098f6bcd4621d373cade4e832627b4f6", "d41d8cd98f00b204e9800998ecf8427e")
+
+    def test_db_stdlib(self):
+        source = """
+        import db
+        let conn = db.connect(":memory:")
+        db.query(conn, "SELECT 1")
+        """
+        # Test db connection and query in Interpreter
+        lexer = Lexer(source)
+        ast = Parser(lexer.tokenize()).parse()
+        interpreter = Interpreter()
+        interp_res = interpreter.interpret(ast)
+        self.assertEqual(interp_res, [(1,)])
+        
+        # Test in VM
+        from novalang.codegen_vm import VMBytecodeGenerator
+        from novalang.vm import VirtualMachine
+        bytecode = VMBytecodeGenerator().generate(ast)
+        vm = VirtualMachine()
+        vm_res = vm.run(bytecode)
+        self.assertEqual(vm_res[0].value[0].value, "1")
+        
+        # Test LLVM compilation
+        from novalang.compiler import LLVMCompiler
+        compiler = LLVMCompiler()
+        ir = compiler.compile(ast)
+        self.assertIn("add i32 1, 0", ir)
+        self.assertIn("add i32 0, 0", ir)
+
+    def test_ai_stdlib(self):
+        self.run_expr_test("import ai\nai.sigmoid(0.0)", 0.5, "fadd double 0.5")
 
 if __name__ == "__main__":
     unittest.main()

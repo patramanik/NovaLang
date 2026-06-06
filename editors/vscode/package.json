@@ -1,0 +1,30 @@
+{
+  "name": "novalang-support",
+  "displayName": "NovaLang Support",
+  "description": "Language support, syntax highlighting, and LSP integration for NovaLang.",
+  "version": "1.3.0",
+  "publisher": "novalang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "novalang",
+        "aliases": ["NovaLang", "novalang"],
+        "extensions": [".nova", ".novac"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "novalang",
+        "scopeName": "source.nova",
+        "path": "./syntaxes/novalang.tmLanguage.json"
+      }
+    ]
+  }
+}
