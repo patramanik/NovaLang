@@ -1,0 +1,42 @@
+# Python build/packaging artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+eggs/
+lib/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+
+# Compiled compiler outputs and binaries
+*.ll
+*.exe
+*.novac
+*.o
+*.obj
+*.pdb
+*.spec
+test_temp/
+my_project/build/
+my_awesome_app/build/
